@@ -7,7 +7,7 @@ import random
 toplevelurl = "http://arabic.desert-sky.net/"
 
 
-def makeModel(anki_ID, css="font-size:x-large;"):
+def makeModelEGY(anki_ID, css="font-size:x-large;"):
     DSKY_model = genanki.Model(
         anki_ID,
         "Desert Sky",
@@ -29,6 +29,22 @@ def makeModel(anki_ID, css="font-size:x-large;"):
     return DSKY_model
 
 
+def makeModelMSA(anki_ID, css="font-size:x-large;"):
+    DSKY_model = genanki.Model(
+        anki_ID,
+        "Desert Sky",
+        fields=[{"name": "English"}, {"name": "MSA"}, {"name": "MSA_transl"},],
+        templates=[
+            {
+                "name": "Card 1",
+                "qfmt": "{{English}}",
+                "afmt": '{{FrontSide}}<hr id="answer">MSA: {{MSA}}, {{MSA_transl}}',
+            },
+        ],
+    )
+    return DSKY_model
+
+
 def getsoup(pageurl):
     page = requests.get(pageurl)
     soup = BeautifulSoup(page.content, "html.parser")
@@ -42,7 +58,8 @@ def geturls():
     soup = getsoup(toplevelurl + listpage)
     url_table = soup.find("table")
     rows = url_table.find_all("tr")
-    urls = [row.find("a", href=True) for row in rows]
+    cols = [row.findAll("a", href=True) for row in rows]
+    urls = [url for col in cols for url in col]
     urls = [url["href"] for url in urls]
     return urls
     # Scans for a "table" html object
@@ -53,6 +70,8 @@ def geturls():
 def gettable(url):
     soup = getsoup(toplevelurl + url)
     vocab_table = soup.find("table", attrs={"class": "vocab"})
+    if not vocab_table:
+        return None
     vocab_rows = vocab_table.find_all("tr")
     array = []
     for row in vocab_rows:
@@ -68,6 +87,9 @@ def gettable(url):
 
 
 def createdeck(array, anki_ID, title):
+    if not array:
+        return None
+    makeModel = makeModelEGY if len(array[0]) == 5 else makeModelMSA
     notes = [genanki.Note(model=makeModel(anki_ID), fields=row) for row in array]
     deck = genanki.Deck(anki_ID, "Dark Sky " + title[:-5])
     for note in notes:
@@ -92,7 +114,8 @@ def createIDs(array):
 urls = geturls()
 tables = [gettable(url) for url in urls]
 IDs = createIDs(urls)
-decks = [createdeck(table, ID, url) for table, ID, url in zip(tables, IDs, urls)]
-for deck, title in zip(decks, urls):
-    genanki.Package(deck).write_to_file(title[:-5] + ".apkg")
+decks = {url: createdeck(table, ID, url) for table, ID, url in zip(tables, IDs, urls)}
+for title, deck in decks.items():
+    if deck:
+        genanki.Package(deck).write_to_file(title[:-5] + ".apkg")
 
